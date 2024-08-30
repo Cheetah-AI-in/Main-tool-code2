@@ -1,0 +1,15 @@
+datetime
+pdfplumber
+selenium
+langchain
+langchain_google_genai
+langchain_community
+google-generativeai
+python-dotenv
+asyncio
+mysql-connector-python
+imaplib2
+faiss-cpu
+webdriver_manager
+PyPDF2
+flask
