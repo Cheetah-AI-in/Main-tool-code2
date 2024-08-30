@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: Main-tool-code
+    env: python
+    buildCommand: ./render-build.sh && pip install -r requirements.txt
+    startCommand: export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome/"; python app.py
+    envVars:
+      - key: PATH
+        value: ${PATH}:/opt/render/project/.render/chrome/opt/google/chrome
