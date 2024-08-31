@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 import threading
-import web_app  # Import your main script
+import tool_app  # Import your main script
 import os
 from werkzeug.utils import secure_filename
 
@@ -24,7 +24,7 @@ def allowed_file(filename):
 def run_script_thread():
     global script_result, uploaded_file_path
     if uploaded_file_path:
-        script_result = web_app.main(uploaded_file_path)
+        script_result = tool_app.main(uploaded_file_path)
     else:
         script_result = {"error": "No file uploaded"}
 
