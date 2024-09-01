@@ -13,3 +13,5 @@ faiss-cpu
 webdriver_manager
 PyPDF2
 flask
+flask-cors
+werkzeug
