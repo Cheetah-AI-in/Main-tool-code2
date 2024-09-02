@@ -119,32 +119,6 @@ def main(uploaded_file_path=None):
         chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
         return chain
 
-    # Function to download PDF attachments and return their paths
-    def download_pdf_attachments(msg, download_folder):
-        if not os.path.exists(download_folder):
-            os.makedirs(download_folder)
-
-        pdf_paths = []
-        for part in msg.walk():
-            if part.get_content_maintype() == 'multipart':
-                continue
-            if part.get('Content-Disposition') is None:
-                continue
-            if part.get_filename() and part.get_filename().endswith('.pdf'):
-                filename = part.get_filename()
-                filepath = os.path.join(download_folder, filename)
-                with open(filepath, 'wb') as f:
-                    f.write(part.get_payload(decode=True))
-                pdf_paths.append(filepath)
-
-        return pdf_paths
-
-    # Function to save text to a file
-    def save_text_to_file(text, filename):
-        text = text.lower()
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(text)
-
     async def get_batch_response(questions, embeddings, vector_stores, semaphore, retries=3):
         async with semaphore:
             for attempt in range(retries):
@@ -278,103 +252,92 @@ def main(uploaded_file_path=None):
                 if len(text) >= 20:
                     break
         return text[:20].lower()  # Return only the first 20 characters
-
-    # Function to check the first few characters of a text file for a specific phrase
-    def check_for_phrase_in_file(file_path, phrase, num_chars=100):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            # Read the first few characters
-            content = f.read(num_chars)
-            
-        # Check if the phrase exists in the content
-        return phrase in content
-
-    # Function to process based on the presence of the phrase
-    def process_based_on_phrase(file_path):
-        phrase = "new job request"
-        
-        if check_for_phrase_in_file(file_path, phrase):
-            print("Phrase found. Returning 1...")
-            return True
-        else:
-            print("Phrase not found. Returning 0...")
-            return False
         
     login_username = os.getenv('LOGIN_USERNAME')
     login_password = os.getenv('LOGIN_PASSWORD')
 
     # Process the uploaded file
+    pdf_docs = []
     if uploaded_file_path and os.path.exists(uploaded_file_path):
-        pdf_docs = [uploaded_file_path]
-        print(f"\nProcessing uploaded PDF document: {uploaded_file_path}")
-        
-        # Extract text from PDF
-        raw_text = get_pdf_text(pdf_docs)
-        
-        # Create FAISS index
-        start_faiss_time = time.time()
-        text_chunks = get_text_chunks(raw_text)
-        get_vector_stores(text_chunks)
-        end_faiss_time = time.time()
-        faiss_duration = end_faiss_time - start_faiss_time
+        pdf_docs.append(uploaded_file_path)
 
-        # Load the vector stores and embeddings once
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
-        vector_stores = FAISS.load_local("faiss-index", embeddings, allow_dangerous_deserialization="True")
-
-        # Set up the webdriver without headless mode
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.binary_location = "/opt/render/project/.render/chrome/opt/google/chrome/chrome"
-    
-        service = ChromeService(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        try:
-            # Open the webpage
-            driver.get("https://cheetah-ai.netlify.app/form")
-            driver.maximize_window()
-
-            # Fill in login details
-            username_field = driver.find_element(By.ID, "username")  # Replace with actual username field ID
-            password_field = driver.find_element(By.ID, "password")  # Replace with actual password field ID
-            login_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")  # Adjust XPATH as needed
-
-            username_field.send_keys(login_username)  # Replace with actual username
-            password_field.send_keys(login_password)  # Replace with actual password
-            login_button.click()
-
-            # Retrieve all input fields
-            # all_elements = driver.find_elements(By.TAG_NAME, "input")
-            all_elements = driver.find_elements(By.CSS_SELECTOR, "input:not([type='hidden'])")
-
-            excluded_ids = []
-
-            # Measure time for filling the form
-            start_fill_time = time.time()
-
-            # Define a semaphore to limit concurrent requests
-            semaphore = asyncio.Semaphore(2)  # Adjust the number of concurrent requests as needed
-
-            # Run the async function
-            asyncio.run(collect_batch_data(all_elements, semaphore=semaphore))
-
-            # After running collect_batch_data, get the result from the queue
-            result = batch_data_queue.get() if not batch_data_queue.empty() else None
-
-            return result
-            time.sleep(10)
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
-        finally:
-            driver.quit()
+    if pdf_docs:
+        print("\nUploaded PDF document:")
+        for path in pdf_docs:
+            print(path)
+            text_pdfplumber = extract_first_twenty_chars_from_pdf(path)
+            print("Text extracted from PDF using pdfplumber:")
+            print(text_pdfplumber)
     else:
-        print("No PDF document uploaded or file not found.")
-        return {"error": "No PDF document uploaded or file not found"}
+        print("No PDF document uploaded.")
+        return {"error": "No PDF document uploaded"}
+        
+    # Measure time for making FAISS index
+    start_faiss_time = time.time()
+    raw_text = get_pdf_text(pdf_docs)
+    text_chunks = get_text_chunks(raw_text)
+    get_vector_stores(text_chunks)
+    end_faiss_time = time.time()
+    faiss_duration = end_faiss_time - start_faiss_time
+
+    # Load the vector stores and embeddings once
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    vector_stores = FAISS.load_local("faiss-index", embeddings, allow_dangerous_deserialization="True")
+
+    # Set up the webdriver without headless mode
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.binary_location = "/opt/render/project/.render/chrome/opt/google/chrome/chrome"
+
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    try:
+        # Open the webpage
+        driver.get("https://cheetah-ai.netlify.app/form")
+        driver.maximize_window()
+
+        # Fill in login details
+        username_field = driver.find_element(By.ID, "username")  # Replace with actual username field ID
+        password_field = driver.find_element(By.ID, "password")  # Replace with actual password field ID
+        login_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")  # Adjust XPATH as needed
+
+        username_field.send_keys(login_username)  # Replace with actual username
+        password_field.send_keys(login_password)  # Replace with actual password
+        login_button.click()
+
+        # Retrieve all input fields
+        # all_elements = driver.find_elements(By.TAG_NAME, "input")
+        all_elements = driver.find_elements(By.CSS_SELECTOR, "input:not([type='hidden'])")
+
+        excluded_ids = []
+
+        # Measure time for filling the form
+        start_fill_time = time.time()
+
+        # Define a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(2)  # Adjust the number of concurrent requests as needed
+
+        # Run the async function
+        asyncio.run(collect_batch_data(all_elements, semaphore=semaphore))
+
+        # After running collect_batch_data, get the result from the queue
+        result = batch_data_queue.get() if not batch_data_queue.empty() else None
+
+        return result
+        time.sleep(10)
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    finally:
+        driver.quit()
+else:
+    print("No PDF document uploaded or file not found.")
+    return {"error": "No PDF document uploaded or file not found"}
 
 # if _name_ == "_main_":
 #     main()
