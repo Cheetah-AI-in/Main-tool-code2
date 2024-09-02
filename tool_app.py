@@ -260,14 +260,6 @@ def main(uploaded_file_path=None):
     pdf_docs = []
     if uploaded_file_path and os.path.exists(uploaded_file_path):
         pdf_docs.append(uploaded_file_path)
-
-    if pdf_docs:
-        print("\nUploaded PDF document:")
-        for path in pdf_docs:
-            print(path)
-            text_pdfplumber = extract_first_twenty_chars_from_pdf(path)
-            print("Text extracted from PDF using pdfplumber:")
-            print(text_pdfplumber)
     else:
         print("No PDF document uploaded.")
         return {"error": "No PDF document uploaded"}
