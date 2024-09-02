@@ -23,8 +23,8 @@ uploaded_file_path = None
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def run_script_thread():
-    global script_result, uploaded_file_path
+def run_script_thread(uploaded_file_path):
+    global script_result
     if uploaded_file_path:
         script_result = tool_app.main(uploaded_file_path)
     else:
@@ -47,9 +47,11 @@ def upload_file():
 
 @app.route('/run-script', methods=['GET'])
 def run_script():
-    global script_result
-    script_result = None  # Reset the result
-    thread = threading.Thread(target=run_script_thread)
+    global uploaded_file_path
+    if not uploaded_file_path:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    thread = threading.Thread(target=run_script_thread, args=(uploaded_file_path,))
     thread.start()
     return jsonify({"message": "Script started"}), 202
 
