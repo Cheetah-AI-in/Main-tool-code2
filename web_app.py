@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import threading
+import asyncio
 import tool_app  # Import your main script
 import os
 from werkzeug.utils import secure_filename
@@ -23,13 +23,6 @@ uploaded_file_path = None
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def run_script_thread(uploaded_file_path):
-    global script_result
-    if uploaded_file_path:
-        script_result = tool_app.main(uploaded_file_path)
-    else:
-        script_result = {"error": "No file uploaded"}
-
 @app.route('/upload', methods=['POST'])
 def upload_file():
     global uploaded_file_path
@@ -46,21 +39,26 @@ def upload_file():
     return jsonify({'error': 'File type not allowed'}), 400
 
 @app.route('/run-script', methods=['GET'])
-def run_script():
-    global uploaded_file_path
+async def run_script():
+    global uploaded_file_path, script_result
     if not uploaded_file_path:
         return jsonify({"error": "No file uploaded"}), 400
 
-    thread = threading.Thread(target=run_script_thread, args=(uploaded_file_path,))
-    thread.start()
-    return jsonify({"message": "Script started"}), 202
+    try:
+        script_result = await asyncio.create_task(tool_app.main(uploaded_file_path))
+        return jsonify({"message": "Script started"}), 202
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/get-result', methods=['GET'])
-def get_result():
+async def get_result():
     global script_result
     if script_result is None:
         return jsonify({"message": "Script still running or hasn't been started"}), 202
-    return jsonify(script_result), 200
+    elif "error" in script_result:
+        return jsonify(script_result), 400
+    else:
+        return jsonify(script_result), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
