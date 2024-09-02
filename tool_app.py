@@ -335,9 +335,6 @@ def main(uploaded_file_path=None):
 
     finally:
         driver.quit()
-else:
-    print("No PDF document uploaded or file not found.")
-    return {"error": "No PDF document uploaded or file not found"}
 
 # if _name_ == "_main_":
 #     main()
