@@ -32,7 +32,7 @@ from selenium.webdriver.support import expected_conditions as EC
 # Global queue to store batch data
 batch_data_queue = Queue()
 
-def main(uploaded_file_path=None):
+def main(uploaded_file_paths=None):
 
     # Load environment variables from .env file
     load_dotenv()
@@ -259,11 +259,13 @@ def main(uploaded_file_path=None):
 
     # Process the uploaded file
     pdf_docs = []
-    if uploaded_file_path and os.path.exists(uploaded_file_path):
-        pdf_docs.append(uploaded_file_path)
-    else:
-        print("No PDF document uploaded.")
-        return {"error": "No PDF document uploaded"}
+    if uploaded_file_paths:
+        for path in uploaded_file_paths:
+            if os.path.exists(path):
+                pdf_docs.append(path)
+    if not pdf_docs:
+        print("No PDF documents uploaded.")
+        return {"error": "No PDF documents uploaded"}
         
     # Measure time for making FAISS index
     start_faiss_time = time.time()
