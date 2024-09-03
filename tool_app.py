@@ -239,8 +239,8 @@ def main(uploaded_file_paths=None):
 
         # Put the data in the queue
         batch_data_queue.put({
-            "Batch data to be filled": batch_data,
-            "Excluded IDs": excluded_ids
+            "Batch_data_to_be_filled": batch_data,
+            "Excluded_IDs": excluded_ids
         })
         
 
