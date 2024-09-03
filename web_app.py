@@ -18,40 +18,44 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Global variables
 script_result = None
-uploaded_file_path = None
+uploaded_file_paths = None
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def run_script_thread(uploaded_file_path):
+def run_script_thread(uploaded_file_paths):
     global script_result
-    if uploaded_file_path:
-        script_result = tool_app.main(uploaded_file_path)
+    if uploaded_file_paths:
+        script_result = tool_app.main(uploaded_file_paths)
     else:
         script_result = {"error": "No file uploaded"}
 
 @app.route('/upload', methods=['POST'])
-def upload_file():
-    global uploaded_file_path
-    if 'file' not in request.files:
+def upload_files():
+    global uploaded_file_paths
+    uploaded_file_paths = []
+    if 'files' not in request.files:
         return jsonify({'error': 'No file part'}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        uploaded_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(uploaded_file_path)
-        return jsonify({'message': 'File uploaded successfully', 'file_path': uploaded_file_path}), 200
-    return jsonify({'error': 'File type not allowed'}), 400
+    files = request.files.getlist('files')
+    for file in files:
+        if file.filename == '':
+            continue
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            uploaded_file_paths.append(file_path)
+    if not uploaded_file_paths:
+        return jsonify({'error': 'No valid files uploaded'}), 400
+    return jsonify({'message': 'Files uploaded successfully', 'file_paths': uploaded_file_paths}), 200
 
 @app.route('/run-script', methods=['GET'])
 def run_script():
-    global uploaded_file_path
-    if not uploaded_file_path:
+    global uploaded_file_paths
+    if not uploaded_file_paths:
         return jsonify({"error": "No file uploaded"}), 400
 
-    thread = threading.Thread(target=run_script_thread, args=(uploaded_file_path,))
+    thread = threading.Thread(target=run_script_thread, args=(uploaded_file_paths,))
     thread.start()
     return jsonify({"message": "Script started"}), 202
 
