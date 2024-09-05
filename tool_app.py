@@ -160,7 +160,7 @@ def main(uploaded_file_paths=None):
         batch_data = {}
         questions = []
         field_ids = []
-        excluded_ids = []  # Initialize excluded_ids list
+        radio_groups = {}
         
         def clean_string(s, is_problematic_id=False):
             # Remove any leading/trailing whitespace, quotes, and backslashes
@@ -169,15 +169,33 @@ def main(uploaded_file_paths=None):
             s = s.replace('```json', '').replace('```', '')
             s = s.replace('{', '').replace('}', '')
             s = s.replace('\n', '')
+            s = s.replace('Is', '')
+            s = s.replace('available, Yes or No?\"', '')
+            s = s.replace('\"', '')
+            s = s.replace(',', '')
             if is_problematic_id:
                 # Additional cleaning for problematic IDs
                 s = s.lstrip('"').rstrip('"')
             return s
         
+        def simplify_field_id(field_id):
+            # Strip "_yes" or "_no" suffixes
+            if field_id.endswith("_yes") or field_id.endswith("_no"):
+                field_id = field_id.rsplit("_", 1)[0]
+            return field_id.strip()
+        
         for element in batch:
             field_id = element.get_attribute("id")
             if field_id:
-                if field_id == "user_job_date":
+                # Check if it's a radio button
+                if element.get_attribute("type") == "radio":
+                    simplified_id = simplify_field_id(field_id)
+                    if simplified_id not in radio_groups:
+                        radio_groups[simplified_id] = simplified_id
+                        question = f"Is {simplified_id.replace('_', ' ')} available, Yes or No?"
+                        questions.append(question)
+                        field_ids.append(simplified_id)
+                elif field_id == "user_job_date":
                     current_date = datetime.now().strftime("%d-%m-%Y")
                     batch_data[field_id] = current_date
                 elif field_id == "Supporting_Documents_supporting_documents_upload_four":
@@ -197,9 +215,7 @@ def main(uploaded_file_paths=None):
             response = await get_batch_response(combined_questions, embeddings, vector_stores, semaphore)
             
             # Process the response
-            lines = response.split(',')
-            current_field_id = None
-            icc_value = None
+            lines = response.split('\n')
             
             for line in lines:
                 line = clean_string(line)
@@ -207,7 +223,8 @@ def main(uploaded_file_paths=None):
                     parts = line.split(":")
                     if len(parts) == 2:
                         current_field_id = parts[0].strip()
-                        answer = parts[1].strip()
+                        answer = parts[1].strip().replace('"', '')
+
                         
                         # Special handling for problematic IDs
                         if current_field_id in ["jec_avallatiin_yes", "equipment_serial_number"]:
@@ -236,11 +253,24 @@ def main(uploaded_file_paths=None):
                         # Check if the current field is IEC and update excluded_ids
                         elif current_field_id == "IEC" and check_iec_in_database(answer):
                             excluded_ids.extend(["Exporter_Name", "GSTN_ID"])
-
+                        
+                        # Simplify the field ID for storing in batch_data
+                        if current_field_id.startswith("Is ") and current_field_id.endswith("available, Yes or No?"):
+                            simplified_id = current_field_id.replace("Is ", "").replace(" available, Yes or No?", "").strip()
+                        else:
+                            simplified_id = current_field_id
+                        
+                        # Handle radio button responses specifically for the format you requested
+                        if simplified_id in radio_groups.values():
+                            answer = "Yes" if answer.lower() == "yes" else "No"
+                            batch_data[simplified_id] = answer
+                        else:
+                            batch_data[simplified_id] = answer
+        
         # Put the data in the queue
         batch_data_queue.put({
             "Batch_data_to_be_filled": batch_data,
-            "Excluded_IDs": excluded_ids
+            "Excluded_IDs": []  # Assuming you will handle exclusions as needed
         })
         
 
